@@ -22,9 +22,9 @@ class Program
 
 class GameTile
 {
-    public int TileType { get; set; }
+    public List<(int, double)> TileType { get; set; }
 
-    public GameTile(int tileType)
+    public GameTile(List<(int, double)> tileType)
     {
         TileType = tileType;
     }
@@ -67,6 +67,8 @@ class GameGrid
 
     public void PopulateGrid(int numSeeds)
     {
+        var aaa = ConsoleColor.DarkCyan;
+
         // Create seeds
         seeds = new List<(int x, int y, int tileType)>();
         var Width = grid.GetLength(0);
@@ -101,22 +103,57 @@ class GameGrid
             for (int y = 0; y < Height; y++)
             {
                 // Find closest seed to current tile
-                double minDistance = double.MaxValue;
-                int closestTileType = ' ';
-                foreach (var seed in seeds)
-                {
-                    double distance = Math.Sqrt((seed.x - x) * (seed.x - x) + (seed.y - y) * (seed.y - y));
-                    if (distance < minDistance)
-                    {
-                        minDistance = distance;
-                        closestTileType = seed.tileType;
-                    }
-                }
+                
+                
+                var seedDists = seeds.Select(s => (Seed: s, Distance: Math.Sqrt((s.x - x) * (s.x - x) + (s.y - y) * (s.y - y)))).ToList();
+                var closestSeed = seedDists.MinBy(s => s.Distance);
+                var neighbouringSeeds = seedDists.Where(s => s.Distance >= closestSeed.Distance && s.Distance <= (closestSeed.Distance + 2) && s.Seed.tileType != closestSeed.Seed.tileType)/*.DistinctBy(s => s.Seed.tileType)*/.ToList();
 
+                if (neighbouringSeeds.Any())
+                {
+                    var influences = neighbouringSeeds.Union(new[] { closestSeed }).Select(s => (Type: s.Seed.tileType,
+                        Influence: (4 - (s.Distance - closestSeed.Distance)))).ToList();
+                    var totalInfluence = influences.Sum(i => i.Influence);
+                    for (int i = 0; i < influences.Count; i++)
+                    {
+                        influences[i] = (influences[i].Type, influences[i].Influence / totalInfluence);
+                    }
+                    grid[x, y] = new GameTile(influences);
+                }
+                else
+                {
+                    grid[x, y] = new GameTile(new List<(int, double)>() { ( closestSeed.Seed.tileType, 1) }); 
+                }
+                
                 // Set tile type to closest seed type
-                grid[x, y] = new GameTile(closestTileType);
+                
+                
             }
         }
+    }
+
+    public ConsoleColor mixColors(List<(int, double)> influences)
+    {
+        //if (colors.Length != probabilities.Length || probabilities.Sum() != 1)
+        //{
+        //    throw new ArgumentException("Invalid input");
+        //}
+
+        double cumulativeProbability = 0;
+        double randomNumber = new Random().NextDouble();
+
+        //var colors = influences.Keys.ToList();
+        //var probabilities = influences.Values.ToList();
+        for (int i = 0; i < influences.Count; i++)
+        {
+            cumulativeProbability += influences[i].Item2;
+            if (randomNumber < cumulativeProbability)
+            {
+                return lightColors[influences[i].Item1];
+            }
+        }
+
+        return ConsoleColor.Black; // fallback color if no color is selected
     }
 
     public void WriteGrid()
@@ -125,7 +162,8 @@ class GameGrid
         {
             for (int j = 0; j < grid.GetLength(1); j++)
             {
-                Console.ForegroundColor = lightColors[grid[i, j].TileType];
+                //Console.Write(Chars[.TileType] + " ");
+                Console.ForegroundColor = mixColors(grid[i, j].TileType);
                 //Console.Write(Chars[grid[i, j].TileType] + " ");
                 Console.Write(seeds.Any(s => s.x == i && s.y == j) ? "X" : "█");
             }
